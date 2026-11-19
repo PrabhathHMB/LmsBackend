@@ -14,6 +14,7 @@ router.use(authenticate);
 
 router.post('/', authorize(Role.ADMIN, Role.TEACHER), CoursesController.create);
 router.patch('/:id', authorize(Role.ADMIN, Role.TEACHER), CoursesController.update);
+router.patch('/:id/status', authorize(Role.ADMIN, Role.TEACHER), CoursesController.updateStatus);
 router.delete('/:id', authorize(Role.ADMIN, Role.TEACHER), CoursesController.delete);
 
 export default router;

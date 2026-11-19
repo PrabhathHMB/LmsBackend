@@ -220,25 +220,89 @@ export class EnrollmentsService {
       },
     });
 
+    let progressRecord;
     if (existing) {
       const isCompleted = !existing.isCompleted;
-      return prisma.lessonProgress.update({
+      progressRecord = await prisma.lessonProgress.update({
         where: { id: existing.id },
         data: {
           isCompleted,
           completedAt: isCompleted ? new Date() : null,
         },
       });
+    } else {
+      progressRecord = await prisma.lessonProgress.create({
+        data: {
+          studentId,
+          lessonId,
+          isCompleted: true,
+          completedAt: new Date(),
+        },
+      });
     }
 
-    return prisma.lessonProgress.create({
-      data: {
-        studentId,
-        lessonId,
-        isCompleted: true,
-        completedAt: new Date(),
-      },
-    });
+    // If marked completed, check if course is 100% complete to auto-issue certificate
+    if (progressRecord.isCompleted) {
+      const courseId = lesson.module.courseId;
+      const totalLessons = await prisma.lesson.count({
+        where: { module: { courseId } },
+      });
+
+      const completedLessons = await prisma.lessonProgress.count({
+        where: {
+          studentId,
+          isCompleted: true,
+          lesson: { module: { courseId } },
+        },
+      });
+
+      if (totalLessons > 0 && completedLessons >= totalLessons) {
+        await prisma.enrollment.update({
+          where: { id: enrollment.id },
+          data: { status: EnrollmentStatus.COMPLETED },
+        });
+
+        const existingCert = await prisma.certificate.findUnique({
+          where: {
+            studentId_courseId: {
+              studentId,
+              courseId,
+            },
+          },
+        });
+
+        if (!existingCert) {
+          const certCode = `CERT-${courseId.slice(-4).toUpperCase()}-${Date.now().toString().slice(-4)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`;
+          await prisma.certificate.create({
+            data: {
+              certificateCode: certCode,
+              studentId,
+              courseId,
+              grade: 'PASSED',
+            },
+          });
+
+          const student = await prisma.student.findUnique({
+            where: { id: studentId },
+            select: { userId: true },
+          });
+
+          if (student) {
+            await prisma.notification.create({
+              data: {
+                userId: student.userId,
+                title: '🎓 Course Completed & Certificate Earned!',
+                message: `Congratulations! You have completed all lessons. Your certificate code is ${certCode}.`,
+                linkUrl: `/certificates/${certCode}`,
+                type: 'SUCCESS',
+              },
+            });
+          }
+        }
+      }
+    }
+
+    return progressRecord;
   }
 
   static async getCourseLearningData(slug: string, studentId: string) {

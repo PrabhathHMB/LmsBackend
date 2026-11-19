@@ -22,7 +22,9 @@ enum CourseLevel {
 
 enum CourseStatus {
   DRAFT
+  PENDING_REVIEW
   PUBLISHED
+  REJECTED
   ARCHIVED
 }
 
@@ -65,6 +67,33 @@ enum NotificationType {
   ALERT
 }
 
+enum OrderStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum FeePaymentStatus {
+  PAID
+  PARTIALLY_PAID
+  UNPAID
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  STRIPE
+  OTHER
+}
+
+enum SessionType {
+  PHYSICAL
+  ONLINE
+  HYBRID
+}
+
 model User {
   id                   String         @id @default(cuid())
   email                String         @unique @db.VarChar(191)
@@ -83,6 +112,7 @@ model User {
   teacherProfile       Teacher?
   announcementsCreated Announcement[]
   notifications        Notification[]
+  auditLogs            AuditLog[]
 
   @@index([email])
   @@index([role])
@@ -95,6 +125,11 @@ model Student {
   user            User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   studentIdNumber String?                @unique @db.VarChar(50)
   gradeLevel      String?                @db.VarChar(50)
+  studentPhone    String?                @db.VarChar(50)
+  parentPhone     String?                @db.VarChar(50)
+  address         String?                @db.Text
+  assignedGradeId String?
+  assignedGrade   CourseCategory?        @relation("GradeStudents", fields: [assignedGradeId], references: [id], onDelete: SetNull)
   dateOfBirth     DateTime?
   enrollments     Enrollment[]
   lessonProgress  LessonProgress[]
@@ -102,11 +137,16 @@ model Student {
   submissions     AssignmentSubmission[]
   quizAttempts    QuizAttempt[]
   results         Result[]
+  certificates    Certificate[]
+  orders          Order[]
+  feeRecords      FeeRecord[]
+  reviews         CourseReview[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
   @@index([userId])
   @@index([studentIdNumber])
+  @@index([assignedGradeId])
 }
 
 model Teacher {
@@ -117,6 +157,7 @@ model Teacher {
   qualification  String?        @db.VarChar(255)
   specialization String?        @db.VarChar(255)
   bio            String?        @db.Text
+  headline       String?        @db.VarChar(255)
   courses        Course[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
@@ -126,40 +167,53 @@ model Teacher {
 }
 
 model CourseCategory {
-  id          String   @id @default(cuid())
-  name        String   @unique @db.VarChar(100)
-  slug        String   @unique @db.VarChar(100)
-  description String?  @db.Text
-  icon        String?  @db.VarChar(100)
-  courses     Course[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String         @id @default(cuid())
+  name              String         @unique @db.VarChar(100)
+  slug              String         @unique @db.VarChar(100)
+  description       String?        @db.Text
+  icon              String?        @db.VarChar(100)
+  defaultMonthlyFee Decimal        @default(2000.00) @db.Decimal(10, 2)
+  courses           Course[]
+  assignedStudents  Student[]      @relation("GradeStudents")
+  classSessions     ClassSession[]
+  feeRecords        FeeRecord[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
 
   @@index([slug])
 }
 
 model Course {
-  id               String          @id @default(cuid())
-  title            String          @db.VarChar(255)
-  slug             String          @unique @db.VarChar(255)
-  description      String          @db.Text
-  shortDescription String?         @db.VarChar(500)
-  thumbnail        String?         @db.VarChar(500)
-  price            Decimal         @default(0.00) @db.Decimal(10, 2)
-  level            CourseLevel     @default(BEGINNER)
-  status           CourseStatus    @default(DRAFT)
-  categoryId       String
-  category         CourseCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  teacherId        String
-  teacher          Teacher         @relation(fields: [teacherId], references: [id], onDelete: Restrict)
-  modules          CourseModule[]
-  enrollments      Enrollment[]
-  assignments      Assignment[]
-  quizzes          Quiz[]
-  attendances      Attendance[]
-  announcements    Announcement[]
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
+  id                 String          @id @default(cuid())
+  title              String          @db.VarChar(255)
+  slug               String          @unique @db.VarChar(255)
+  description        String          @db.Text
+  shortDescription   String?         @db.VarChar(500)
+  thumbnail          String?         @db.VarChar(500)
+  learningObjectives String?         @db.Text
+  prerequisites      String?         @db.Text
+  targetAudience     String?         @db.Text
+  price              Decimal         @default(0.00) @db.Decimal(10, 2)
+  currency           String          @default("USD") @db.VarChar(10)
+  level              CourseLevel     @default(BEGINNER)
+  status             CourseStatus    @default(DRAFT)
+  rejectionReason    String?         @db.Text
+  isFeatured         Boolean         @default(false)
+  categoryId         String
+  category           CourseCategory  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  teacherId          String
+  teacher            Teacher         @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  modules            CourseModule[]
+  enrollments        Enrollment[]
+  assignments        Assignment[]
+  quizzes            Quiz[]
+  attendances        Attendance[]
+  announcements      Announcement[]
+  certificates       Certificate[]
+  orders             Order[]
+  reviews            CourseReview[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   @@index([categoryId])
   @@index([teacherId])
@@ -189,9 +243,13 @@ model Lesson {
   title           String           @db.VarChar(255)
   content         String?          @db.Text
   videoUrl        String?          @db.VarChar(500)
+  youtubeUrl      String?          @db.VarChar(500)
+  youtubeVideoId  String?          @db.VarChar(50)
   durationMinutes Int              @default(0)
+  durationSeconds Int              @default(0)
   orderIndex      Int              @default(0)
   isFreePreview   Boolean          @default(false)
+  isPublished     Boolean          @default(true)
   resources       LessonResource[]
   progress        LessonProgress[]
   createdAt       DateTime         @default(now())
@@ -215,14 +273,15 @@ model LessonResource {
 }
 
 model Enrollment {
-  id          String           @id @default(cuid())
-  studentId   String
-  student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  courseId    String
-  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  status      EnrollmentStatus @default(ACTIVE)
-  enrolledAt  DateTime         @default(now())
-  completedAt DateTime?
+  id                 String           @id @default(cuid())
+  studentId          String
+  student            Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId           String
+  course             Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  status             EnrollmentStatus @default(ACTIVE)
+  progressPercentage Int              @default(0)
+  enrolledAt         DateTime         @default(now())
+  completedAt        DateTime?
 
   @@unique([studentId, courseId])
   @@index([studentId])
@@ -231,23 +290,42 @@ model Enrollment {
 }
 
 model LessonProgress {
-  id          String    @id @default(cuid())
-  studentId   String
-  student     Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  lessonId    String
-  lesson      Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  isCompleted Boolean   @default(false)
-  completedAt DateTime?
+  id                  String    @id @default(cuid())
+  studentId           String
+  student             Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lessonId            String
+  lesson              Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  isCompleted         Boolean   @default(false)
+  lastPositionSeconds Int       @default(0)
+  completedAt         DateTime?
 
   @@unique([studentId, lessonId])
   @@index([studentId])
   @@index([lessonId])
 }
 
+model ClassSession {
+  id          String         @id @default(cuid())
+  gradeId     String
+  grade       CourseCategory @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  title       String         @db.VarChar(255)
+  description String?        @db.Text
+  sessionDate DateTime       @db.Date
+  sessionType SessionType    @default(PHYSICAL)
+  attendances Attendance[]
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([gradeId])
+  @@index([sessionDate])
+}
+
 model Attendance {
   id          String           @id @default(cuid())
-  courseId    String
-  course      Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseId    String?
+  course      Course?          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  session     ClassSession?    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   studentId   String
   student     Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
   sessionDate DateTime         @db.Date
@@ -255,10 +333,90 @@ model Attendance {
   remarks     String?          @db.VarChar(255)
   createdAt   DateTime         @default(now())
 
-  @@unique([courseId, studentId, sessionDate])
+  @@unique([studentId, sessionDate])
   @@index([courseId])
+  @@index([sessionId])
   @@index([studentId])
   @@index([sessionDate])
+}
+
+model FeeRecord {
+  id            String           @id @default(cuid())
+  studentId     String
+  student       Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  gradeId       String
+  grade         CourseCategory   @relation(fields: [gradeId], references: [id], onDelete: Cascade)
+  year          Int
+  month         Int
+  feeAmount     Decimal          @default(0.00) @db.Decimal(10, 2)
+  paidAmount    Decimal          @default(0.00) @db.Decimal(10, 2)
+  status        FeePaymentStatus @default(UNPAID)
+  paymentMethod PaymentMethod?
+  receiptNumber String?          @db.VarChar(100)
+  note          String?          @db.Text
+  paidAt        DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@unique([studentId, year, month])
+  @@index([studentId])
+  @@index([gradeId])
+  @@index([year, month])
+  @@index([status])
+}
+
+model Certificate {
+  id              String   @id @default(cuid())
+  certificateCode String   @unique @db.VarChar(100)
+  studentId       String
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  grade           String?  @default("PASSED") @db.VarChar(50)
+  issuedAt        DateTime @default(now())
+
+  @@unique([studentId, courseId])
+  @@index([studentId])
+  @@index([courseId])
+  @@index([certificateCode])
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  orderNumber      String      @unique @db.VarChar(100)
+  studentId        String
+  student          Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId         String
+  course           Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  amount           Decimal     @db.Decimal(10, 2)
+  currency         String      @default("USD") @db.VarChar(10)
+  paymentGateway   String      @default("STRIPE") @db.VarChar(50)
+  gatewayPaymentId String?     @db.VarChar(255)
+  status           OrderStatus @default(PENDING)
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([studentId])
+  @@index([courseId])
+  @@index([orderNumber])
+  @@index([status])
+}
+
+model CourseReview {
+  id         String   @id @default(cuid())
+  courseId   String
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  rating     Int      @default(5)
+  comment    String   @db.Text
+  isApproved Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([courseId, studentId])
+  @@index([courseId])
+  @@index([studentId])
 }
 
 model Assignment {
@@ -425,4 +583,20 @@ model Notification {
 
   @@index([userId])
   @@index([isRead])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   @db.VarChar(100)
+  entity    String   @db.VarChar(100)
+  entityId  String?  @db.VarChar(100)
+  details   String?  @db.Text
+  ipAddress String?  @db.VarChar(100)
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entity])
 }

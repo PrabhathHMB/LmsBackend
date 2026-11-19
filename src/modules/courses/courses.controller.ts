@@ -107,4 +107,28 @@ export class CoursesController {
       next(error);
     }
   }
+
+  static async updateStatus(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { status, rejectionReason } = req.body;
+      if (!req.user) throw ApiError.unauthorized();
+
+      if (!status) {
+        throw ApiError.badRequest('status is required');
+      }
+
+      const updated = await CoursesService.updateCourseStatus(
+        id,
+        status,
+        req.user.role,
+        req.user.teacherId,
+        rejectionReason
+      );
+
+      sendSuccess(res, updated, 'Course status updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -249,4 +249,76 @@ export class CoursesService {
 
     return prisma.course.delete({ where: { id } });
   }
+
+  static async updateCourseStatus(
+    id: string,
+    status: CourseStatus,
+    role: Role,
+    teacherId?: string,
+    rejectionReason?: string
+  ) {
+    const course = await prisma.course.findUnique({
+      where: { id },
+      include: {
+        teacher: { include: { user: true } },
+      },
+    });
+
+    if (!course) {
+      throw ApiError.notFound('Course not found');
+    }
+
+    if (role === Role.TEACHER) {
+      if (course.teacherId !== teacherId) {
+        throw ApiError.forbidden('You do not have permission to manage this course');
+      }
+      if (status !== CourseStatus.DRAFT && status !== CourseStatus.PENDING_REVIEW) {
+        throw ApiError.badRequest('Teachers can only submit courses for review or revert to draft');
+      }
+    }
+
+    const updated = await prisma.course.update({
+      where: { id },
+      data: {
+        status,
+        rejectionReason: status === CourseStatus.REJECTED ? rejectionReason : null,
+      },
+      include: {
+        category: true,
+        teacher: {
+          include: {
+            user: { select: { firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+
+    if (role === Role.ADMIN && course.teacher?.user?.id) {
+      let title = 'Course Status Updated';
+      let message = `Your course "${course.title}" status has been updated to ${status}.`;
+      let type: 'INFO' | 'SUCCESS' | 'WARNING' | 'ALERT' = 'INFO';
+
+      if (status === CourseStatus.PUBLISHED) {
+        title = '🎉 Course Approved & Published!';
+        message = `Your course "${course.title}" has been approved by admin and is now live for students.`;
+        type = 'SUCCESS';
+      } else if (status === CourseStatus.REJECTED) {
+        title = 'Course Needs Revision';
+        message = `Your course "${course.title}" was not approved. Reason: ${rejectionReason || 'Please review guidelines.'}`;
+        type = 'WARNING';
+      }
+
+      await prisma.notification.create({
+        data: {
+          userId: course.teacher.user.id,
+          title,
+          message,
+          type,
+          linkUrl: `/teacher/courses`,
+        },
+      });
+    }
+
+    return updated;
+  }
 }

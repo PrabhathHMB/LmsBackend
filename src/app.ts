@@ -28,6 +28,9 @@ import announcementsRoutes from './modules/announcements/announcements.routes';
 import notificationsRoutes from './modules/notifications/notifications.routes';
 import reportsRoutes from './modules/reports/reports.routes';
 import uploadsRoutes from './modules/uploads/uploads.routes';
+import certificatesRoutes from './modules/certificates/certificates.routes';
+import feesRoutes from './modules/fees/fees.routes';
+import sessionsRoutes from './modules/sessions/sessions.routes';
 
 const app: Application = express();
 
@@ -90,6 +93,9 @@ apiV1Router.use('/announcements', announcementsRoutes);
 apiV1Router.use('/notifications', notificationsRoutes);
 apiV1Router.use('/reports', reportsRoutes);
 apiV1Router.use('/uploads', uploadsRoutes);
+apiV1Router.use('/certificates', certificatesRoutes);
+apiV1Router.use('/fees', feesRoutes);
+apiV1Router.use('/sessions', sessionsRoutes);
 
 app.use('/api/v1', apiV1Router);
 

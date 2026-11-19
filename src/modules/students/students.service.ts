@@ -20,6 +20,8 @@ export class StudentsService {
     if (params.search) {
       where.OR = [
         { studentIdNumber: { contains: params.search } },
+        { studentPhone: { contains: params.search } },
+        { parentPhone: { contains: params.search } },
         { user: { firstName: { contains: params.search } } },
         { user: { lastName: { contains: params.search } } },
         { user: { email: { contains: params.search } } },
@@ -34,6 +36,13 @@ export class StudentsService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
+          assignedGrade: {
+            select: {
+              id: true,
+              name: true,
+              defaultMonthlyFee: true,
+            },
+          },
           user: {
             select: {
               id: true,
@@ -50,6 +59,7 @@ export class StudentsService {
               enrollments: true,
               submissions: true,
               quizAttempts: true,
+              certificates: true,
             },
           },
         },
@@ -71,6 +81,7 @@ export class StudentsService {
     const student = await prisma.student.findUnique({
       where: { id },
       include: {
+        assignedGrade: true,
         user: {
           select: {
             id: true,
@@ -82,6 +93,15 @@ export class StudentsService {
             isActive: true,
             createdAt: true,
           },
+        },
+        certificates: {
+          include: {
+            course: { select: { title: true, slug: true } },
+          },
+        },
+        feeRecords: {
+          orderBy: [{ year: 'desc' }, { month: 'desc' }],
+          take: 12,
         },
         enrollments: {
           include: {
@@ -101,6 +121,7 @@ export class StudentsService {
             submissions: true,
             quizAttempts: true,
             results: true,
+            certificates: true,
           },
         },
       },
@@ -120,6 +141,10 @@ export class StudentsService {
     firstName?: string;
     lastName?: string;
     phone?: string;
+    studentPhone?: string;
+    parentPhone?: string;
+    address?: string;
+    assignedGradeId?: string;
   }) {
     const student = await prisma.student.findUnique({ where: { id } });
     if (!student) {
@@ -144,6 +169,7 @@ export class StudentsService {
         where: { id },
         data: profileData,
         include: {
+          assignedGrade: true,
           user: {
             select: {
               id: true,

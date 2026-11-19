@@ -22,13 +22,13 @@ export class AttendanceService {
     const operations = data.records.map((rec) => {
       return prisma.attendance.upsert({
         where: {
-          courseId_studentId_sessionDate: {
-            courseId: data.courseId,
+          studentId_sessionDate: {
             studentId: rec.studentId,
             sessionDate: date,
           },
         },
         update: {
+          courseId: data.courseId,
           status: rec.status,
           remarks: rec.remarks,
         },
