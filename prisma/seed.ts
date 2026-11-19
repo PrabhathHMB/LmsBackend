@@ -1,4 +1,17 @@
-import { PrismaClient, Role, CourseLevel, CourseStatus, EnrollmentStatus, AttendanceStatus, SubmissionStatus, ResultType, TargetRole } from '@prisma/client';
+import {
+  PrismaClient,
+  Role,
+  CourseLevel,
+  CourseStatus,
+  EnrollmentStatus,
+  AttendanceStatus,
+  SubmissionStatus,
+  ResultType,
+  TargetRole,
+  FeePaymentStatus,
+  PaymentMethod,
+  SessionType,
+} from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -6,25 +19,25 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting LMS Database Seeding...');
 
-  // 1. Create Categories
+  // 1. Create Categories (including Sri Lankan Secondary & A/L grades with tuition fee tiers)
   const categories = [
-    { name: 'Web Development', slug: 'web-development', description: 'Master front-end, back-end, and full-stack engineering technologies.' },
-    { name: 'Data Science & AI', slug: 'data-science-ai', description: 'Explore machine learning, deep learning, Python, and data analysis.' },
-    { name: 'Mobile App Development', slug: 'mobile-app-development', description: 'Build native and cross-platform mobile apps for iOS and Android.' },
-    { name: 'UI/UX Design', slug: 'ui-ux-design', description: 'Design modern user interfaces and intuitive digital product experiences.' },
-    { name: 'Cloud & DevOps', slug: 'cloud-devops', description: 'Deploy, scale, and manage containerized applications with Docker, Kubernetes, and Cloud providers.' },
+    { name: 'Grade 10 Mathematics', slug: 'grade-10-mathematics', description: 'Comprehensive O/L Grade 10 syllabus with geometry, algebra, and statistics.', defaultMonthlyFee: 2500.0 },
+    { name: 'Grade 11 O/L Mathematics', slug: 'grade-11-ol-mathematics', description: 'Complete General Certificate of Education Ordinary Level mathematics masterclass.', defaultMonthlyFee: 2500.0 },
+    { name: 'A/L Science for Technology (SFT)', slug: 'al-science-for-technology', description: 'Advanced Level Technology stream core subject - Science for Technology.', defaultMonthlyFee: 3500.0 },
+    { name: 'Full-Stack Web Development', slug: 'web-development', description: 'Master front-end, back-end, and full-stack engineering technologies.', defaultMonthlyFee: 4000.0 },
+    { name: 'Data Science & Machine Learning', slug: 'data-science-ai', description: 'Explore machine learning, deep learning, Python, and data analysis.', defaultMonthlyFee: 4500.0 },
   ];
 
   const categoryMap: Record<string, string> = {};
   for (const cat of categories) {
     const c = await prisma.courseCategory.upsert({
       where: { slug: cat.slug },
-      update: {},
+      update: { defaultMonthlyFee: cat.defaultMonthlyFee },
       create: cat,
     });
     categoryMap[cat.slug] = c.id;
   }
-  console.log('✔ Course Categories created');
+  console.log('✔ Course Categories created with default monthly tuition fees');
 
   // 2. Passwords
   const adminPass = await bcrypt.hash('Admin123!', 10);
@@ -41,7 +54,7 @@ async function main() {
       firstName: 'Admin',
       lastName: 'Director',
       role: Role.ADMIN,
-      phone: '+1 800 555 0100',
+      phone: '+94 77 123 4567',
     },
   });
   console.log('✔ Admin user created: admin@lms.local');
@@ -53,16 +66,16 @@ async function main() {
     create: {
       email: 'teacher@lms.local',
       passwordHash: teacherPass,
-      firstName: 'Sarah',
-      lastName: 'Jenkins',
+      firstName: 'Kavinda',
+      lastName: 'Perera',
       role: Role.TEACHER,
-      phone: '+1 800 555 0101',
+      phone: '+94 71 987 6543',
       teacherProfile: {
         create: {
           employeeId: 'TCH-1001',
-          qualification: 'M.Sc. Computer Science, Stanford University',
-          specialization: 'Full-Stack Architecture & Cloud Systems',
-          bio: 'Lead software engineer and instructor with 12+ years of industry experience teaching full-stack web and cloud systems.',
+          qualification: 'B.Sc. (Hons) Engineering, University of Moratuwa',
+          specialization: 'Secondary Mathematics & Science for Technology',
+          bio: 'Senior educator with over 10 years of experience coaching island top rankers in O/L Mathematics and A/L Science for Technology.',
         },
       },
     },
@@ -70,7 +83,7 @@ async function main() {
   });
   console.log('✔ Teacher created: teacher@lms.local');
 
-  // 5. Students
+  // 5. Students with Sri Lankan Contact Details and Grade Allocation
   const student1 = await prisma.user.upsert({
     where: { email: 'student@lms.local' },
     update: {},
@@ -78,13 +91,17 @@ async function main() {
       email: 'student@lms.local',
       passwordHash: studentPass,
       firstName: 'Alex',
-      lastName: 'Carter',
+      lastName: 'Fernando',
       role: Role.STUDENT,
-      phone: '+1 800 555 0201',
+      phone: '+94 76 111 2233',
       studentProfile: {
         create: {
           studentIdNumber: 'STU-2001',
-          gradeLevel: 'Undergraduate Year 2',
+          gradeLevel: 'Grade 11',
+          studentPhone: '+94 76 111 2233',
+          parentPhone: '+94 77 444 5566',
+          address: 'No 45, Temple Road, Colombo 03, Sri Lanka',
+          assignedGradeId: categoryMap['grade-11-ol-mathematics'],
         },
       },
     },
@@ -97,135 +114,82 @@ async function main() {
     create: {
       email: 'student2@lms.local',
       passwordHash: studentPass,
-      firstName: 'Maya',
-      lastName: 'Lin',
+      firstName: 'Nethmi',
+      lastName: 'Silva',
       role: Role.STUDENT,
-      phone: '+1 800 555 0202',
+      phone: '+94 72 333 4455',
       studentProfile: {
         create: {
           studentIdNumber: 'STU-2002',
-          gradeLevel: 'Undergraduate Year 3',
+          gradeLevel: 'Grade 11',
+          studentPhone: '+94 72 333 4455',
+          parentPhone: '+94 71 888 9900',
+          address: 'No 12/A, Galle Road, Panadura, Sri Lanka',
+          assignedGradeId: categoryMap['grade-11-ol-mathematics'],
         },
       },
     },
     include: { studentProfile: true },
   });
-  console.log('✔ Students created: student@lms.local, student2@lms.local');
+  console.log('✔ Students created with Grade Allocation and Parent Contact info');
+
+  const teacherId = teacherUser.teacherProfile!.id;
+  const studentProfileId = student1.studentProfile!.id;
 
   // 6. Courses
-  const teacherId = teacherUser.teacherProfile!.id;
   const course1 = await prisma.course.upsert({
-    where: { slug: 'full-stack-web-development-react-node' },
+    where: { slug: 'grade-11-ol-mathematics-mastery' },
     update: {},
     create: {
-      title: 'Full-Stack Web Development with React & Node.js',
-      slug: 'full-stack-web-development-react-node',
-      shortDescription: 'Master modern full-stack development building end-to-end applications from scratch.',
-      description: 'Comprehensive curriculum covering HTML5, CSS3, modern JavaScript ES6+, TypeScript, React 18, Next.js, Node.js, Express, MySQL, and Prisma ORM. Build production-grade web applications with authentication, security best practices, and robust API design.',
-      price: 49.99,
-      level: CourseLevel.BEGINNER,
+      title: 'Grade 11 O/L Mathematics Complete Masterclass',
+      slug: 'grade-11-ol-mathematics-mastery',
+      shortDescription: 'Master the entire O/L Mathematics syllabus with theory, theorems, and past paper analysis.',
+      description: 'Comprehensive study program tailored for students sitting for the G.C.E. Ordinary Level examinations. Covers quadratic equations, trigonometry, progressions, circle theorems, and probability.',
+      price: 2500.0,
+      currency: 'LKR',
+      level: CourseLevel.INTERMEDIATE,
       status: CourseStatus.PUBLISHED,
-      thumbnail: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800&q=80',
-      categoryId: categoryMap['web-development'],
+      thumbnail: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=800&q=80',
+      categoryId: categoryMap['grade-11-ol-mathematics'],
       teacherId,
       modules: {
         create: [
           {
-            title: 'Module 1: Foundations of Modern Web Development',
-            description: 'Core concepts of internet architecture, HTTP protocol, HTML semantic layout, and modern CSS.',
+            title: 'Module 1: Quadratic Equations & Functions',
             orderIndex: 0,
             lessons: {
               create: [
                 {
-                  title: '1.1 How the Web Works: HTTP, DNS & Browsers',
-                  content: 'Understanding client-server models, request-response lifecycles, and modern rendering engines.',
-                  videoUrl: 'https://www.youtube.com/watch?v=iYM2zFP3Zn0',
-                  durationMinutes: 25,
+                  title: '1.1 Solving Quadratic Equations by Factoring',
+                  content: 'Comprehensive lesson on finding roots of quadratic equations through factor decomposition.',
+                  videoUrl: 'https://www.youtube.com/watch?v=zqL_Vv7_7gM',
+                  duration: 45,
                   orderIndex: 0,
-                  isFreePreview: true,
+                  isFree: true,
                 },
                 {
-                  title: '1.2 Modern CSS Architecture: Tailwind & Responsive Design',
-                  content: 'Learn modern utility-first styling with Tailwind CSS, Flexbox, and CSS Grid layout algorithms.',
-                  videoUrl: 'https://www.youtube.com/watch?v=ft30zcMlFao',
-                  durationMinutes: 35,
+                  title: '1.2 Quadratic Formula & Completing the Square',
+                  content: 'Step-by-step derivation and application of the quadratic formula.',
+                  videoUrl: 'https://www.youtube.com/watch?v=EeVrL1xM1wM',
+                  duration: 50,
                   orderIndex: 1,
-                  isFreePreview: true,
+                  isFree: false,
                 },
               ],
             },
           },
           {
-            title: 'Module 2: TypeScript & Modern JavaScript',
-            description: 'Type systems, generics, async/await, and modern ESNext features for scalable codebases.',
+            title: 'Module 2: Circle Theorems & Geometric Proofs',
             orderIndex: 1,
             lessons: {
               create: [
                 {
-                  title: '2.1 Essential TypeScript for Professional Engineers',
-                  content: 'Static typing, interfaces, type narrowing, and strict configuration in modern development.',
-                  videoUrl: 'https://www.youtube.com/watch?v=BwuLxPH8IDs',
-                  durationMinutes: 40,
+                  title: '2.1 Angles in the Same Segment & Central Angles',
+                  content: 'Understanding foundational theorems regarding angles subtended by arcs at the circumference.',
+                  videoUrl: 'https://www.youtube.com/watch?v=1F5d_0TqP4I',
+                  duration: 40,
                   orderIndex: 0,
-                  isFreePreview: false,
-                },
-                {
-                  title: '2.2 Asynchronous JavaScript & Promises',
-                  content: 'Deep dive into event loop, microtasks, callbacks, Promises, and async/await syntax.',
-                  durationMinutes: 30,
-                  orderIndex: 1,
-                  isFreePreview: false,
-                },
-              ],
-            },
-          },
-        ],
-      },
-      assignments: {
-        create: [
-          {
-            title: 'Assignment 1: Responsive Portfolio Landing Page',
-            description: 'Build a responsive personal portfolio using semantic HTML, Tailwind CSS, and TypeScript. Submit your GitHub repository link and deployed URL.',
-            maxScore: 100,
-            dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days ahead
-          },
-        ],
-      },
-      quizzes: {
-        create: [
-          {
-            title: 'Web Foundations & TypeScript Quiz',
-            description: 'Test your understanding of HTTP, CSS layouts, and TypeScript fundamentals.',
-            timeLimitMinutes: 20,
-            passingScore: 60,
-            isPublished: true,
-            questions: {
-              create: [
-                {
-                  text: 'Which HTTP status code signifies that a resource was successfully created?',
-                  points: 10,
-                  orderIndex: 0,
-                  options: {
-                    create: [
-                      { text: '200 OK', isCorrect: false, orderIndex: 0 },
-                      { text: '201 Created', isCorrect: true, orderIndex: 1 },
-                      { text: '204 No Content', isCorrect: false, orderIndex: 2 },
-                      { text: '400 Bad Request', isCorrect: false, orderIndex: 3 },
-                    ],
-                  },
-                },
-                {
-                  text: 'What is the purpose of TypeScript interfaces?',
-                  points: 10,
-                  orderIndex: 1,
-                  options: {
-                    create: [
-                      { text: 'To define the structural shape and contract of objects', isCorrect: true, orderIndex: 0 },
-                      { text: 'To run JavaScript code faster at runtime', isCorrect: false, orderIndex: 1 },
-                      { text: 'To connect directly to databases', isCorrect: false, orderIndex: 2 },
-                      { text: 'To encrypt network payloads', isCorrect: false, orderIndex: 3 },
-                    ],
-                  },
+                  isFree: false,
                 },
               ],
             },
@@ -234,27 +198,8 @@ async function main() {
       },
     },
   });
-
-  const course2 = await prisma.course.upsert({
-    where: { slug: 'modern-python-data-science-machine-learning' },
-    update: {},
-    create: {
-      title: 'Modern Python for Data Science and Machine Learning',
-      slug: 'modern-python-data-science-machine-learning',
-      shortDescription: 'Master Python, NumPy, Pandas, visualization, and machine learning model development.',
-      description: 'Hands-on journey through data manipulation, exploratory analysis, linear algebra foundations, Scikit-Learn pipelines, and model deployment.',
-      price: 39.99,
-      level: CourseLevel.INTERMEDIATE,
-      status: CourseStatus.PUBLISHED,
-      thumbnail: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=800&q=80',
-      categoryId: categoryMap['data-science-ai'],
-      teacherId,
-    },
-  });
-  console.log('✔ Courses, Modules, Lessons, Assignments, and Quizzes seeded');
 
   // 7. Enroll Student 1 in Course 1
-  const studentProfileId = student1.studentProfile!.id;
   await prisma.enrollment.upsert({
     where: {
       studentId_courseId: {
@@ -270,11 +215,79 @@ async function main() {
     },
   });
 
-  // 8. Welcome Announcement
+  // 8. Class Sessions & Batch Attendance
+  const sessionDate = new Date();
+  sessionDate.setHours(0, 0, 0, 0);
+
+  const session = await prisma.classSession.create({
+    data: {
+      gradeId: categoryMap['grade-11-ol-mathematics'],
+      title: 'Week 3: Quadratic Functions & Past Papers Seminar',
+      description: 'Physical class session held in Hall A and streamed live for online students.',
+      sessionDate,
+      sessionType: SessionType.HYBRID,
+      attendances: {
+        create: [
+          {
+            studentId: studentProfileId,
+            sessionDate,
+            status: AttendanceStatus.PRESENT,
+            remarks: 'Attended physically and submitted homework booklet.',
+          },
+        ],
+      },
+    },
+  });
+  console.log('✔ Class Session and Attendance record created');
+
+  // 9. Monthly Tuition Fee Records
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth() + 1;
+
+  await prisma.feeRecord.upsert({
+    where: {
+      studentId_year_month: {
+        studentId: studentProfileId,
+        year: currentYear,
+        month: currentMonth,
+      },
+    },
+    update: {},
+    create: {
+      studentId: studentProfileId,
+      gradeId: categoryMap['grade-11-ol-mathematics'],
+      year: currentYear,
+      month: currentMonth,
+      feeAmount: 2500.0,
+      paidAmount: 2500.0,
+      status: FeePaymentStatus.PAID,
+      paymentMethod: PaymentMethod.CASH,
+      receiptNumber: `REC-${currentYear}${String(currentMonth).padStart(2, '0')}-1098`,
+      paidAt: new Date(),
+      note: 'Tuition paid in person at main reception desk.',
+    },
+  });
+  console.log('✔ Tuition Fee Record created with Receipt Number');
+
+  // 10. Sample Certificate for Alex Fernando
+  const certCode = 'CERT-MATH-2026-X7K9';
+  await prisma.certificate.upsert({
+    where: { certificateCode: certCode },
+    update: {},
+    create: {
+      certificateCode: certCode,
+      studentId: studentProfileId,
+      courseId: course1.id,
+      grade: 'DISTINCTION',
+    },
+  });
+  console.log(`✔ Verified Certificate created: Code [${certCode}]`);
+
+  // 11. Welcome Announcement
   await prisma.announcement.create({
     data: {
-      title: 'Welcome to the New Academic Semester!',
-      content: 'We are thrilled to welcome all students and instructors to our brand new, high-performance Learning Management System. Check your course syllabus and assignments.',
+      title: 'Welcome to the New Academic Session!',
+      content: 'We are thrilled to launch the new LMS with monthly fee management, attendance tracking, and verified certificates.',
       targetRole: TargetRole.ALL,
       authorId: admin.id,
     },
