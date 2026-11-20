@@ -6,17 +6,10 @@ import { ApiError } from '../../utils/api-error.utils';
 export class AuthController {
   static async register(req: Request, res: Response, next: NextFunction) {
     try {
-      const result = await AuthService.register(req.body);
-      
-      // Send refresh token as HTTP-only cookie
-      res.cookie('refreshToken', result.refreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      });
-
-      sendCreated(res, result, 'User registered successfully');
+      // Direct public registration is disabled.
+      throw ApiError.forbidden(
+        'Public student self-registration is disabled. All student and instructor accounts must be created directly by an administrator or authorized instructor.'
+      );
     } catch (error) {
       next(error);
     }

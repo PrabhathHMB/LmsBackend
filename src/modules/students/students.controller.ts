@@ -8,11 +8,14 @@ export class StudentsController {
   static async list(req: Request, res: Response, next: NextFunction) {
     try {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
-      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10;
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 50;
       const search = req.query.search as string;
       const gradeLevel = req.query.gradeLevel as string;
 
-      const result = await StudentsService.listStudents({ page, limit, search, gradeLevel });
+      // If caller is Teacher, restrict to students enrolled in their courses
+      const teacherId = req.user?.role === Role.TEACHER ? req.user.teacherId : undefined;
+
+      const result = await StudentsService.listStudents({ page, limit, search, gradeLevel, teacherId });
       sendSuccess(res, result.students, 'Students retrieved successfully', 200, result.meta);
     } catch (error) {
       next(error);
@@ -24,13 +27,22 @@ export class StudentsController {
       const { id } = req.params;
       const student = await StudentsService.getStudentById(id);
 
-      // Student can view their own, Teachers and Admins can view any
+      // Student can view their own, Teachers can view their enrolled students, Admins view any
       if (
         req.user?.role === Role.STUDENT &&
         req.user?.studentId !== id &&
         req.user?.userId !== student.userId
       ) {
         throw ApiError.forbidden('Access denied');
+      }
+
+      if (req.user?.role === Role.TEACHER) {
+        const isEnrolledInTeacherCourse = student.enrollments.some(
+          (e: any) => e.course?.teacherId === req.user?.teacherId
+        );
+        if (!isEnrolledInTeacherCourse) {
+          throw ApiError.forbidden('Access denied to students outside your courses');
+        }
       }
 
       sendSuccess(res, student, 'Student retrieved successfully');
@@ -50,6 +62,15 @@ export class StudentsController {
         req.user?.userId !== student.userId
       ) {
         throw ApiError.forbidden('Access denied');
+      }
+
+      if (req.user?.role === Role.TEACHER) {
+        const isEnrolledInTeacherCourse = student.enrollments.some(
+          (e: any) => e.course?.teacherId === req.user?.teacherId
+        );
+        if (!isEnrolledInTeacherCourse) {
+          throw ApiError.forbidden('Teachers can only update students enrolled in their courses');
+        }
       }
 
       const updated = await StudentsService.updateStudent(id, req.body);

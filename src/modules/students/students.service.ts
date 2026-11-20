@@ -7,14 +7,25 @@ export class StudentsService {
     limit?: number;
     search?: string;
     gradeLevel?: string;
+    teacherId?: string;
   }) {
     const page = params.page || 1;
-    const limit = params.limit || 10;
+    const limit = params.limit || 50;
     const skip = (page - 1) * limit;
 
     const where: any = {};
     if (params.gradeLevel) {
       where.gradeLevel = params.gradeLevel;
+    }
+
+    if (params.teacherId) {
+      where.enrollments = {
+        some: {
+          course: {
+            teacherId: params.teacherId,
+          },
+        },
+      };
     }
 
     if (params.search) {
@@ -52,6 +63,18 @@ export class StudentsService {
               phone: true,
               avatarUrl: true,
               isActive: true,
+            },
+          },
+          enrollments: {
+            include: {
+              course: {
+                select: {
+                  id: true,
+                  title: true,
+                  slug: true,
+                  teacherId: true,
+                },
+              },
             },
           },
           _count: {
@@ -111,6 +134,7 @@ export class StudentsService {
                 title: true,
                 slug: true,
                 thumbnail: true,
+                teacherId: true,
               },
             },
           },

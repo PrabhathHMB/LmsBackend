@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { UsersService } from './users.service';
-import { sendSuccess } from '../../utils/response.utils';
+import { sendSuccess, sendCreated } from '../../utils/response.utils';
 import { ApiError } from '../../utils/api-error.utils';
 import { Role } from '@prisma/client';
 
@@ -17,8 +17,8 @@ export class UsersController {
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      // Allow Admin or the user themselves
-      if (req.user?.role !== Role.ADMIN && req.user?.userId !== id) {
+      // Allow Admin, Teacher (for their students), or the user themselves
+      if (req.user?.role !== Role.ADMIN && req.user?.role !== Role.TEACHER && req.user?.userId !== id) {
         throw ApiError.forbidden('You can only access your own profile');
       }
 
@@ -29,22 +29,35 @@ export class UsersController {
     }
   }
 
+  static async create(req: Request, res: Response, next: NextFunction) {
+    try {
+      if (!req.user) {
+        throw ApiError.unauthorized('Authentication required');
+      }
+
+      const user = await UsersService.createUser(req.body, req.user);
+      sendCreated(res, user, 'User account created successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async update(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;
-      if (req.user?.role !== Role.ADMIN && req.user?.userId !== id) {
-        throw ApiError.forbidden('You can only update your own profile');
-      }
-
-      // Non-admins cannot alter their role or active status
-      const data = { ...req.body };
-      if (req.user?.role !== Role.ADMIN) {
-        delete data.role;
-        delete data.isActive;
-      }
-
-      const updated = await UsersService.updateUser(id, data);
+      const updated = await UsersService.updateUser(id, req.body, req.user);
       sendSuccess(res, updated, 'User updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async resetPassword(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const { newPassword } = req.body;
+      await UsersService.resetPassword(id, newPassword, req.user);
+      sendSuccess(res, null, 'User password has been reset successfully');
     } catch (error) {
       next(error);
     }
