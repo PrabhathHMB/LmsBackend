@@ -34,7 +34,7 @@ export class CoursesController {
         teacherId,
       });
 
-      sendSuccess(res, { courses: result.courses, pagination: result.pagination }, 'Courses fetched successfully', 200, result.meta);
+      sendSuccess(res, result.courses, 'Courses fetched successfully', 200, result.meta);
     } catch (error) {
       next(error);
     }
