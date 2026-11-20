@@ -37,6 +37,20 @@ export class EnrollmentsController {
     }
   }
 
+  static async getStudentDashboardData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const studentId = req.user?.studentId;
+      if (!studentId) {
+        throw ApiError.forbidden('Only students can view their learning dashboard data');
+      }
+
+      const data = await EnrollmentsService.getStudentDashboardData(studentId);
+      sendSuccess(res, data, 'Student dashboard data fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async listAll(req: Request, res: Response, next: NextFunction) {
     try {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;

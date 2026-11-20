@@ -1,6 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../utils/api-error.utils';
-import { EnrollmentStatus } from '@prisma/client';
+import { EnrollmentStatus, CourseStatus, AttendanceStatus } from '@prisma/client';
 
 export class EnrollmentsService {
   static async enroll(studentId: string, courseId: string) {
@@ -390,6 +390,100 @@ export class EnrollmentsService {
         completedCount,
         progressPercent,
       },
+    };
+  }
+
+  static async getStudentDashboardData(studentId: string) {
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        user: true,
+        assignedGrade: true,
+      },
+    });
+
+    if (!student) {
+      throw ApiError.notFound('Student record not found');
+    }
+
+    const [enrollments, certificates, attendances, latestFee] = await Promise.all([
+      prisma.enrollment.findMany({
+        where: { studentId },
+        include: {
+          course: {
+            include: {
+              category: true,
+              teacher: { include: { user: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
+              modules: {
+                include: {
+                  lessons: { select: { id: true, title: true, durationMinutes: true, durationSeconds: true } },
+                },
+              },
+            },
+          },
+        },
+        orderBy: { enrolledAt: 'desc' },
+      }),
+      prisma.certificate.findMany({
+        where: { studentId },
+        include: {
+          course: { select: { id: true, title: true, slug: true, thumbnail: true } },
+        },
+        orderBy: { issuedAt: 'desc' },
+      }),
+      prisma.attendance.findMany({
+        where: { studentId },
+        orderBy: { sessionDate: 'desc' },
+        take: 10,
+        include: {
+          session: { select: { id: true, title: true, sessionDate: true, sessionType: true } },
+        },
+      }),
+      prisma.feeRecord.findFirst({
+        where: { studentId },
+        orderBy: [{ year: 'desc' }, { month: 'desc' }],
+      }),
+    ]);
+
+    let authorizedCourses: any[] = [];
+    if (student.assignedGradeId) {
+      authorizedCourses = await prisma.course.findMany({
+        where: {
+          categoryId: student.assignedGradeId,
+          status: CourseStatus.PUBLISHED,
+        },
+        include: {
+          category: true,
+          teacher: { include: { user: { select: { firstName: true, lastName: true, avatarUrl: true } } } },
+          modules: { include: { lessons: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+
+    const totalSessions = attendances.length;
+    const attendedSessions = attendances.filter(
+      (a) => a.status === AttendanceStatus.PRESENT || a.status === AttendanceStatus.LATE
+    ).length;
+    const attendanceRate = totalSessions > 0 ? Math.round((attendedSessions / totalSessions) * 100) : 100;
+
+    return {
+      userProfile: {
+        id: student.id,
+        userId: student.userId,
+        name: `${student.user.firstName} ${student.user.lastName}`.trim(),
+        email: student.user.email,
+        phone: student.studentPhone || student.user.phone,
+        parentPhone: student.parentPhone,
+        address: student.address,
+        assignedGrade: student.assignedGrade,
+      },
+      enrollments,
+      authorizedCourses,
+      certificates,
+      attendances,
+      attendanceRate,
+      latestFee,
     };
   }
 }

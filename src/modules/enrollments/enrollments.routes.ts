@@ -10,6 +10,7 @@ router.use(authenticate);
 
 router.post('/', authorize(Role.STUDENT), EnrollmentsController.enroll);
 router.get('/my', authorize(Role.STUDENT), EnrollmentsController.getMyEnrollments);
+router.get('/dashboard', authorize(Role.STUDENT), EnrollmentsController.getStudentDashboardData);
 router.get('/admin', authorize(Role.ADMIN), EnrollmentsController.listAll);
 router.post('/progress/:lessonId', authorize(Role.STUDENT), EnrollmentsController.toggleProgress);
 router.get('/learn/:slug', authorize(Role.STUDENT), EnrollmentsController.getCourseLearning);

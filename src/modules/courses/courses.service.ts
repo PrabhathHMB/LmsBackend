@@ -7,7 +7,11 @@ export class CoursesService {
     page?: number;
     limit?: number;
     search?: string;
+    q?: string;
+    category?: string;
     categoryId?: string;
+    stream?: string;
+    price?: string;
     level?: CourseLevel;
     status?: CourseStatus;
     teacherId?: string;
@@ -24,6 +28,29 @@ export class CoursesService {
 
     if (params.categoryId) {
       where.categoryId = params.categoryId;
+    } else if (params.category) {
+      where.category = { slug: params.category };
+    } else if (params.stream === 'maths') {
+      where.category = {
+        slug: {
+          in: [
+            'grade-6-maths',
+            'grade-7-maths',
+            'grade-8-maths',
+            'grade-9-maths',
+            'grade-10-maths',
+            'grade-11-maths',
+          ],
+        },
+      };
+    } else if (params.stream === 'al-sft') {
+      where.category = { slug: 'al-sft' };
+    }
+
+    if (params.price === 'free') {
+      where.price = 0;
+    } else if (params.price === 'paid') {
+      where.price = { gt: 0 };
     }
 
     if (params.level) {
@@ -34,10 +61,12 @@ export class CoursesService {
       where.teacherId = params.teacherId;
     }
 
-    if (params.search) {
+    const searchQuery = params.search || params.q;
+    if (searchQuery) {
       where.OR = [
-        { title: { contains: params.search } },
-        { description: { contains: params.search } },
+        { title: { contains: searchQuery } },
+        { description: { contains: searchQuery } },
+        { shortDescription: { contains: searchQuery } },
       ];
     }
 
@@ -53,8 +82,13 @@ export class CoursesService {
           teacher: {
             include: {
               user: {
-                select: { firstName: true, lastName: true, avatarUrl: true },
+                select: { id: true, firstName: true, lastName: true, avatarUrl: true },
               },
+            },
+          },
+          modules: {
+            include: {
+              lessons: { select: { id: true, durationMinutes: true, durationSeconds: true } },
             },
           },
           _count: {
@@ -69,11 +103,127 @@ export class CoursesService {
 
     return {
       courses,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit),
+      },
       meta: {
         page,
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  static async getHomePageData() {
+    const [categories, mathsCourses, sftCourses, totalStudents, totalCourses] = await Promise.all([
+      prisma.courseCategory.findMany({ orderBy: { name: 'asc' } }),
+      prisma.course.findMany({
+        where: {
+          status: CourseStatus.PUBLISHED,
+          category: {
+            slug: {
+              in: [
+                'grade-6-maths',
+                'grade-7-maths',
+                'grade-8-maths',
+                'grade-9-maths',
+                'grade-10-maths',
+                'grade-11-maths',
+              ],
+            },
+          },
+        },
+        include: {
+          category: true,
+          teacher: {
+            include: {
+              user: {
+                select: { id: true, firstName: true, lastName: true, avatarUrl: true },
+              },
+            },
+          },
+          modules: { include: { lessons: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.course.findMany({
+        where: {
+          status: CourseStatus.PUBLISHED,
+          category: { slug: 'al-sft' },
+        },
+        include: {
+          category: true,
+          teacher: {
+            include: {
+              user: {
+                select: { id: true, firstName: true, lastName: true, avatarUrl: true },
+              },
+            },
+          },
+          modules: { include: { lessons: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.student.count(),
+      prisma.course.count({ where: { status: CourseStatus.PUBLISHED } }),
+    ]);
+
+    return {
+      categories,
+      mathsCourses,
+      sftCourses,
+      stats: {
+        totalStudents,
+        totalCourses,
+      },
+    };
+  }
+
+  static async getCourseLearnData(courseIdOrSlug: string, studentId: string) {
+    const course = await prisma.course.findFirst({
+      where: {
+        OR: [{ id: courseIdOrSlug }, { slug: courseIdOrSlug }],
+      },
+      include: {
+        category: true,
+        modules: {
+          orderBy: { orderIndex: 'asc' },
+          include: {
+            lessons: {
+              orderBy: { orderIndex: 'asc' },
+              include: { resources: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!course) {
+      throw ApiError.notFound('Course not found');
+    }
+
+    const progress = await prisma.lessonProgress.findMany({
+      where: {
+        studentId,
+        lesson: { module: { courseId: course.id } },
+      },
+    });
+
+    const completedLessonIds = progress.filter((p) => p.isCompleted).map((p) => p.lessonId);
+    const totalLessons = course.modules.reduce((sum, m) => sum + m.lessons.length, 0);
+    const progressPercent = totalLessons > 0 ? Math.round((completedLessonIds.length / totalLessons) * 100) : 0;
+
+    return {
+      course,
+      completedLessonIds,
+      stats: {
+        totalLessons,
+        completedLessons: completedLessonIds.length,
+        progressPercent,
       },
     };
   }

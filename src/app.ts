@@ -31,6 +31,8 @@ import uploadsRoutes from './modules/uploads/uploads.routes';
 import certificatesRoutes from './modules/certificates/certificates.routes';
 import feesRoutes from './modules/fees/fees.routes';
 import sessionsRoutes from './modules/sessions/sessions.routes';
+import adminRoutes from './modules/admin/admin.routes';
+import instructorRoutes from './modules/teachers/instructor.routes';
 
 const app: Application = express();
 
@@ -96,6 +98,8 @@ apiV1Router.use('/uploads', uploadsRoutes);
 apiV1Router.use('/certificates', certificatesRoutes);
 apiV1Router.use('/fees', feesRoutes);
 apiV1Router.use('/sessions', sessionsRoutes);
+apiV1Router.use('/admin', adminRoutes);
+apiV1Router.use('/instructor', instructorRoutes);
 
 app.use('/api/v1', apiV1Router);
 

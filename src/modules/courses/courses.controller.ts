@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { CoursesService } from './courses.service';
+import { EnrollmentsService } from '../enrollments/enrollments.service';
+import { prisma } from '../../config/prisma';
 import { sendSuccess, sendCreated } from '../../utils/response.utils';
 import { ApiError } from '../../utils/api-error.utils';
 import { CourseLevel, CourseStatus } from '@prisma/client';
@@ -9,8 +11,11 @@ export class CoursesController {
     try {
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 12;
-      const search = req.query.search as string;
+      const search = (req.query.search as string) || (req.query.q as string);
+      const category = req.query.category as string;
       const categoryId = req.query.categoryId as string;
+      const stream = req.query.stream as string;
+      const price = req.query.price as string;
       const level = req.query.level as CourseLevel;
       const status = req.query.status as CourseStatus;
       const teacherId = req.query.teacherId as string;
@@ -19,13 +24,79 @@ export class CoursesController {
         page,
         limit,
         search,
+        q: req.query.q as string,
+        category,
         categoryId,
+        stream,
+        price,
         level,
         status,
         teacherId,
       });
 
-      sendSuccess(res, result.courses, 'Courses fetched successfully', 200, result.meta);
+      sendSuccess(res, { courses: result.courses, pagination: result.pagination }, 'Courses fetched successfully', 200, result.meta);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getHomePageData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const data = await CoursesService.getHomePageData();
+      sendSuccess(res, data, 'Home page data fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getCategories(req: Request, res: Response, next: NextFunction) {
+    try {
+      const categories = await prisma.courseCategory.findMany({
+        orderBy: { name: 'asc' },
+        include: {
+          _count: {
+            select: { courses: true, assignedStudents: true },
+          },
+        },
+      });
+      sendSuccess(res, categories, 'Categories fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async getCourseLearnData(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      const studentId = req.user?.studentId;
+      if (!studentId) {
+        throw ApiError.forbidden('Only enrolled students can access classroom content');
+      }
+
+      const data = await CoursesService.getCourseLearnData(id, studentId);
+      sendSuccess(res, data, 'Classroom data fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async enroll(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { id } = req.params;
+      let studentId = req.user?.studentId;
+      if (!studentId && req.user?.userId) {
+        let student = await prisma.student.findUnique({ where: { userId: req.user.userId } });
+        if (!student) {
+          student = await prisma.student.create({ data: { userId: req.user.userId } });
+        }
+        studentId = student.id;
+      }
+      if (!studentId) {
+        throw ApiError.forbidden('Student account required for enrollment');
+      }
+
+      const enrollment = await EnrollmentsService.enroll(studentId, id);
+      sendCreated(res, enrollment, 'Enrolled in course successfully');
     } catch (error) {
       next(error);
     }
