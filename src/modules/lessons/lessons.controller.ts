@@ -1,8 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import { LessonsService } from './lessons.service';
 import { sendSuccess, sendCreated } from '../../utils/response.utils';
+import { ApiError } from '../../utils/api-error.utils';
 
 export class LessonsController {
+  static async getByGrade(req: Request, res: Response, next: NextFunction) {
+    try {
+      const { gradeSlug } = req.params;
+      if (!req.user) {
+        throw ApiError.unauthorized('Please log in to view lessons');
+      }
+      const data = await LessonsService.getLessonsByGrade(gradeSlug, req.user);
+      sendSuccess(res, data, 'Grade lessons fetched successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getById(req: Request, res: Response, next: NextFunction) {
     try {
       const { id } = req.params;

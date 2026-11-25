@@ -1,5 +1,6 @@
 import { prisma } from '../../config/prisma';
 import { ApiError } from '../../utils/api-error.utils';
+import { Role } from '@prisma/client';
 
 export class LessonsService {
   static async getLessonById(id: string, studentId?: string) {
@@ -132,5 +133,139 @@ export class LessonsService {
     }
 
     return prisma.lessonResource.delete({ where: { id: resourceId } });
+  }
+
+  static async getLessonsByGrade(gradeSlug: string, user: { userId: string; role: Role; studentId?: string }) {
+    // 1. Verify category or course exists
+    let category = await prisma.courseCategory.findUnique({
+      where: { slug: gradeSlug },
+    });
+
+    let course: any = null;
+
+    if (category) {
+      course = await prisma.course.findFirst({
+        where: { categoryId: category.id },
+        include: {
+          modules: {
+            orderBy: { orderIndex: 'asc' },
+            include: {
+              lessons: {
+                orderBy: { orderIndex: 'asc' },
+                include: {
+                  resources: true,
+                },
+              },
+            },
+          },
+        },
+      });
+    } else {
+      course = await prisma.course.findUnique({
+        where: { slug: gradeSlug },
+        include: {
+          modules: {
+            orderBy: { orderIndex: 'asc' },
+            include: {
+              lessons: {
+                orderBy: { orderIndex: 'asc' },
+                include: {
+                  resources: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      if (course && course.categoryId) {
+        category = await prisma.courseCategory.findUnique({
+          where: { id: course.categoryId },
+        });
+      }
+    }
+
+    if (!category && !course) {
+      throw ApiError.notFound('Grade category or course not found');
+    }
+
+    // 2. Authentication & Role validation
+    if (user.role === Role.STUDENT && user.studentId) {
+      const student = await prisma.student.findUnique({
+        where: { id: user.studentId },
+      });
+
+      if (!student) {
+        throw ApiError.forbidden('Student profile not found');
+      }
+    }
+
+    if (!course) {
+      return {
+        category,
+        course: null,
+        lessons: [],
+      };
+    }
+
+    // 4. Flatten and order lessons
+    const rawLessons = course.modules.flatMap((m: any) =>
+      m.lessons.map((l: any) => ({
+        ...l,
+        moduleTitle: m.title,
+      }))
+    );
+
+    // 5. Fetch student progress if studentId is present
+    const lessonIds = rawLessons.map((l: any) => l.id);
+    const progressList = user.studentId && lessonIds.length > 0
+      ? await prisma.lessonProgress.findMany({
+          where: {
+            studentId: user.studentId,
+            lessonId: { in: lessonIds },
+          },
+        })
+      : [];
+
+    const progressMap = new Map(progressList.map((p) => [p.lessonId, p.isCompleted]));
+
+    const lessons = rawLessons.map((l: any) => {
+      let parsedContent: any = null;
+      if (l.content) {
+        try {
+          parsedContent = JSON.parse(l.content);
+        } catch {
+          parsedContent = { notes: l.content };
+        }
+      }
+
+      return {
+        id: l.id,
+        moduleId: l.moduleId,
+        moduleTitle: l.moduleTitle,
+        title: l.title,
+        orderIndex: l.orderIndex,
+        durationMinutes: l.durationMinutes,
+        isFreePreview: l.isFreePreview,
+        videoUrl: l.videoUrl,
+        youtubeUrl: l.youtubeUrl,
+        youtubeVideoId: l.youtubeVideoId,
+        content: parsedContent,
+        resources: l.resources,
+        isCompleted: progressMap.get(l.id) || false,
+      };
+    });
+
+    return {
+      category,
+      course: {
+        id: course.id,
+        title: course.title,
+        slug: course.slug,
+        description: course.description,
+        thumbnail: course.thumbnail,
+      },
+      lessons,
+    };
   }
 }

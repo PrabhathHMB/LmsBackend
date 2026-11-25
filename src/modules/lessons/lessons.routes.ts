@@ -6,6 +6,8 @@ import { Role } from '@prisma/client';
 
 const router = Router();
 
+router.get('/grade/:gradeSlug', authenticate, LessonsController.getByGrade);
+router.get('/course/:gradeSlug', authenticate, LessonsController.getByGrade);
 router.get('/:id', optionalAuthenticate, LessonsController.getById);
 
 router.use(authenticate);

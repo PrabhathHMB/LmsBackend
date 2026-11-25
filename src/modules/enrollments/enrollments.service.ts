@@ -198,7 +198,7 @@ export class EnrollmentsService {
       throw ApiError.notFound('Lesson not found');
     }
 
-    const enrollment = await prisma.enrollment.findUnique({
+    let enrollment = await prisma.enrollment.findUnique({
       where: {
         studentId_courseId: {
           studentId,
@@ -207,7 +207,16 @@ export class EnrollmentsService {
       },
     });
 
-    if (!enrollment || enrollment.status !== 'ACTIVE') {
+    if (!enrollment) {
+      // Auto-enroll student into course if lesson allows free preview or demo
+      enrollment = await prisma.enrollment.create({
+        data: {
+          studentId,
+          courseId: lesson.module.courseId,
+          status: 'ACTIVE',
+        },
+      });
+    } else if (enrollment.status !== 'ACTIVE') {
       throw ApiError.forbidden('You must be actively enrolled in the course to track progress');
     }
 
